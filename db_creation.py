@@ -27,7 +27,7 @@ db_con.commit()
 cursor.execute("""CREATE TABLE IF NOT EXISTS ImdbRating(
                   ImdbId VARCHAR(255),
                   Votes INT UNSIGNED NOT NULL DEFAULT 0,
-                  RatingValue DECIMAL(4,2) UNSIGNED,
+                  RatingValue SMALLINT UNSIGNED,
                   PRIMARY KEY (ImdbId)
     );""")
 db_con.commit()
@@ -37,7 +37,8 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS Movie(
                   MovieId SMALLINT UNSIGNED AUTO_INCREMENT,
                   Name VARCHAR(255) NOT NULL,
                   ReleaseDate DATE,
-                  Rating ENUM('G','PG','PG-13','R','NC-17'),
+                  RunningTime SMALLINT UNSIGNED,
+                  Rating ENUM('G','PG','PG-13','R','NC-17','TV-MA','TV-PG','TV-14','TV-Y','TV-Y7','TV-G'),
                   Plot TEXT,
                   Awards TEXT,
                   MetaScore DECIMAL(6,3) UNSIGNED,
@@ -54,7 +55,7 @@ db_con.commit()
 cursor.execute("""CREATE TABLE IF NOT EXISTS Rating(
                   RatingId SMALLINT UNSIGNED AUTO_INCREMENT,
                   Source VARCHAR(255) NOT NULL,
-                  RatingValue DECIMAL(4,2) UNSIGNED,
+                  RatingValue TINYINT UNSIGNED,
                   MovieId SMALLINT UNSIGNED,
                   FOREIGN KEY (MovieId) REFERENCES Movie(MovieId) ON DELETE CASCADE ON UPDATE CASCADE,
                   PRIMARY KEY (RatingId)
@@ -65,7 +66,8 @@ db_con.commit()
 cursor.execute("""CREATE TABLE IF NOT EXISTS Staff(
                   StaffId SMALLINT UNSIGNED AUTO_INCREMENT,
                   FirstName VARCHAR(255) NOT NULL,
-                  LastName VARCHAR(255) NOT NULL,
+                  MiddleName VARCHAR(255),
+                  LastName VARCHAR(255),
                   Profession ENUM('Actor', 'Director', 'Writer') NOT NULL,
                   PRIMARY KEY (StaffId)
     );""")
@@ -164,8 +166,10 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS Review(
                   UpdateDate DATETIME,
                   PictureId SMALLINT UNSIGNED,
                   LinkId SMALLINT UNSIGNED,
+                  MovieId SMALLINT UNSIGNED,
                   FOREIGN KEY (PictureId) REFERENCES Picture(PictureId) ON DELETE CASCADE ON UPDATE CASCADE,
                   FOREIGN KEY (LinkId) REFERENCES Link(LinkId) ON DELETE CASCADE ON UPDATE CASCADE,
+                  FOREIGN KEY (MovieId) REFERENCES Movie(MovieId) ON DELETE CASCADE ON UPDATE CASCADE,
                   PRIMARY KEY (ReviewId)
     );""")
 db_con.commit()
