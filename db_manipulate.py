@@ -5,6 +5,7 @@ from dateutil.parser import parse
 
 ERR     = -1
 SUCCESS = 0
+DUP     = -2
 
 host = 'localhost'
 port = '3305'
@@ -14,7 +15,35 @@ db_name = 'DbMysql25'
 
 # connect to db
 db_con = SQLC.connect(host=host, port=port, user=user,passwd=password)
-cursor = db_con.cursor()
+cursor = db_con.cursor(buffered=True)
+
+def get(table, desired_col, cond_dict):
+    cursor.execute(f'USE {db_name}')
+    db_con.commit()
+
+    select_query = f"""SELECT {desired_col}
+                      FROM {table}
+                      WHERE """
+    
+    select_query_params_dict = {}
+
+    is_first = True
+    for (cond_col, cond_val) in cond_dict.items():
+        select_query += f'{cond_col} = %({cond_val})s ' if is_first else f'AND {cond_col} = %({cond_val})s '
+        select_query_params_dict[cond_val] = cond_val
+        if is_first:
+            is_first = False
+
+    print(f'\n\nget\nselect_query = {select_query}\nselect_query_params_dict = {select_query_params_dict}')
+
+    try:
+        cursor.execute(select_query, select_query_params_dict)
+        db_con.commit()
+        res = cursor.fetchone()[0]
+        return res
+    except SQLC.IntegrityError as err:
+        print(f'\n\nget_id\nerror = {err}')
+        return ERR
 
 
 db_to_api_dict = {
@@ -99,7 +128,6 @@ db_to_api_dict = {
     },
     'Review': {
         'Headline': 'headline',
-        'MpaaRating': 'mpaa_rating',
         'CriticsPick': 'critics_pick',
         'Summary': 'summary_short',
         'PublicationDate': 'publication_date',
@@ -121,15 +149,11 @@ json_to_db_dict = {
     },
     'Movie': {
         'RunningTime': [('N/A', ''),(' min', '')],
-        'Rating': [('N/A', ''),('Not Rated', '')],
+        'Rating': [('N/A', ''),('Not Rated', ''), ('Unrated', '')],
         'MetaScore': [('N/A', '')],
         'BoxOffice': [('N/A', ''),(',', ''),('$','')],
     },
-    'Rating': {
-        'RatingValue': [('.','')]
-    },
     'Review': {
-        'MpaaRating': [('Unrated', ''), ('Not Rated','')],
         'PublicationDate': [('null','')],
         'CreationDate': [('null','')],
         'UpdateDate': [('null','')],
@@ -140,15 +164,23 @@ json_to_db_dict = {
 def json_to_db(table, col, val):
     if table in json_to_db_dict and col in json_to_db_dict[table]:
         for r in json_to_db_dict[table][col]:
+            print(f'\n\njson_to_db\ntable = {table}\nval = {val}\ncol = {col}\nr = {r}')
             val = val.replace(*r)
 
     if col == 'ReleaseDate':
         val = parse(val).strftime('%Y-%m-%d') if val != 'N/A' else ''
 
+    # extract the percentages out of 100 without the % sign
     if col == 'RatingValue':
-        # val in ['<int>%', '<int>'\100, '<decimal without .>/10']
-        val = val[0:2]
-
+        # val in ['<int <= 100>/100', '<decimal <= 10>/10']
+        if '/' in val:
+            val = val[:val.find('/')]
+            if '.' in val:
+                val = str(int(float(val) * 10))
+        # val in ['<int <= 100>%']
+        else: 
+            val = val[:val.find('%')]
+        
     return val
 
 
@@ -171,6 +203,8 @@ def build_insert_query(table_name, data, fks_dict=None):
     def update_insert_query(key, val, use_fks=False):
         nonlocal insert_query_cols, insert_query_vals, is_first, insert_query_params_dict
         actual_value = data[val] if not use_fks else fks_dict[val]
+        if actual_value == None:
+            return
         actual_value = json_to_db(table_name, key, actual_value)
         if actual_value != '':
             if is_first:
@@ -203,6 +237,9 @@ def insert(table_name, data, fks_dict=None):
         cursor.execute(insert_query, insert_query_params_dict)
         db_con.commit()
     except SQLC.IntegrityError as err:
+        if err.errno == 1062:
+            print(f'\n\n{caller}\n duplicate record')
+            return DUP
         print(f'\n\n{caller}\nerror = {err}')
         return ERR
     print(f'\n\ninsert | caller = {caller} | table name = {table_name}\nSuccesful insert! {cursor.rowcount} rows were affacted')
@@ -213,11 +250,12 @@ def update_foreign_keys(data):
     caller = inspect.stack()[1].function
 
     if caller == 'add_review':
-        if 'multimedia' in data:
+        picture_id, link_id = '', ''
+        if 'multimedia' in data and type(data['multimedia']) == dict:
             add_picture_rc = insert('Picture', data['multimedia'])
             picture_id = cursor.lastrowid if add_picture_rc != ERR else ''
             print(f'picture_id = {picture_id}')
-        if 'link' in data:
+        if 'link' in data and type(data['link']) == dict:
             link_id_rc = insert('Link', data['link'])
             link_id = cursor.lastrowid if link_id_rc != ERR else ''
             print(f'link_id = {link_id}')
@@ -225,6 +263,7 @@ def update_foreign_keys(data):
 
     # caller == add_movie
     else:
+        poster_id, imdb_id = '', ''
         if 'Poster' in data:
             add_poster_rc = insert('Poster', data)
             poster_id = cursor.lastrowid if add_poster_rc != ERR else ''
@@ -270,9 +309,18 @@ def add_staff(movie, movie_id):
                 person_details['MiddleName'] = ' '.join(writer_name[1:-1]) if len(writer_name) > 2 else ''
                 person_details['LastName'] = writer_name[-1] if len(writer_name) > 1 else ''
                 add_staff_rc = insert('Staff', person_details)
-                staff_id = cursor.lastrowid if add_staff_rc != ERR else ''
-                fks = {'staff_id': staff_id, 'movie_id': movie_id}
-                insert('StaffMovie', None, fks)
+                if add_staff_rc != ERR:
+                    if add_staff_rc != DUP:
+                        staff_id = cursor.lastrowid
+                    else:
+                        cond_dict = {'FirstName': person_details['FirstName'],
+                                     'LastName': person_details['LastName'],
+                                     'Profession': person_details['Profession']}
+                        staff_id = get('Staff', 'StaffId', cond_dict)
+                        if staff_id == ERR:
+                            continue
+                    fks = {'staff_id': staff_id, 'movie_id': movie_id}
+                    insert('StaffMovie', None, fks)
 
 
 # insert values to Country, CountryMovie
@@ -283,9 +331,15 @@ def add_country(movie, movie_id):
             if country == 'N/A':
                 continue
             add_country_rc = insert('Country', {'Country': country})
-            country_id = cursor.lastrowid if add_country_rc != ERR else ''
-            fks = {'country_id': country_id, 'movie_id': movie_id}
-            insert('CountryMovie', None, fks)
+            if add_country_rc != ERR:
+                if add_country_rc != DUP:
+                    country_id = cursor.lastrowid 
+                else:
+                    country_id = get('Country', 'CountryId', {'Name': country})
+                    if country_id == ERR:
+                        continue
+                fks = {'country_id': country_id, 'movie_id': movie_id}
+                insert('CountryMovie', None, fks)
 
 
 # insert values to Language, LanguageMovie
@@ -296,9 +350,15 @@ def add_language(movie, movie_id):
             if language == 'N/A':
                 continue
             add_language_rc = insert('Language', {'Language': language})
-            language_id = cursor.lastrowid if add_language_rc != ERR else ''
-            fks = {'language_id': language_id, 'movie_id': movie_id}
-            insert('LanguageMovie', None, fks)
+            if add_language_rc != ERR:
+                if add_language_rc != DUP:
+                    language_id = cursor.lastrowid 
+                else:
+                    language_id = get('Language', 'LanguageId', {'Name': language})
+                    if language_id == ERR:
+                        continue
+                fks = {'language_id': language_id, 'movie_id': movie_id}
+                insert('LanguageMovie', None, fks)
 
 
 # insert values to Genre, GenreMovie
@@ -309,9 +369,15 @@ def add_genre(movie, movie_id):
             if genre == 'N/A':
                 continue
             add_genre_rc = insert('Genre', {'Genre': genre})
-            gnere_id = cursor.lastrowid if add_genre_rc != ERR else ''
-            fks = {'genre_id': gnere_id, 'movie_id': movie_id}
-            insert('GenreMovie', None, fks)
+            if add_genre_rc != ERR:
+                if add_genre_rc != DUP:
+                    gnere_id = cursor.lastrowid 
+                else:
+                    gnere_id = get('Genre', 'GenreId', {'Name': genre})
+                    if gnere_id == ERR:
+                        continue
+                fks = {'genre_id': gnere_id, 'movie_id': movie_id}
+                insert('GenreMovie', None, fks)
 
 
 def add_movie(movie):
@@ -351,6 +417,34 @@ def add_movie(movie):
 
 
 
+# def select(table, desired_cols_list, conds_dict):
+#     select_query = 'SELECT '
+
+#     is_first = True
+#     for desired_col in desired_cols_list:
+#         select_query += f'%({desired_col})s' if is_first else f', %({desired_col})s'
+#         if is_first:
+#             is_first = False
+
+#     select_query = f'FROM {table} WHERE'
+    
+#     is_first = True
+#     for (cond_col, cond_val) in conds_dict.items():
+#         select_query += f' %({cond_col})s = %({cond_val})s' if is_first else f' AND %({cond_col})s = %({cond_val})s'
+#         if is_first:
+#             is_first = False
+
+#     select_query_params_dict = {'desired_col': desired_col,
+#                                 'table': table,
+#                                 'cond_col': cond_col,
+#                                 'cond_val': cond_val}
+#     try:
+#         cursor.execute(select_query, select_query_params_dict)
+#         db_con.commit()
+#         return cursor.fetchone()[0]
+#     except SQLC.IntegrityError as err:
+#         print(f'\n\nget_id\nerror = {err}')
+#         return ERR
 
 
 

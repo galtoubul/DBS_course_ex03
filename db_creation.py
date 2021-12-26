@@ -38,7 +38,7 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS Movie(
                   Name VARCHAR(255) NOT NULL,
                   ReleaseDate DATE,
                   RunningTime SMALLINT UNSIGNED,
-                  Rating ENUM('G','PG','PG-13','R','NC-17','TV-MA','TV-PG','TV-14','TV-Y','TV-Y7','TV-G'),
+                  Rating ENUM('G','PG','PG-13','R','NC-17','TV-MA','TV-PG','TV-14','TV-Y','TV-Y7','TV-G','Approved'),
                   Plot TEXT,
                   Awards TEXT,
                   MetaScore DECIMAL(6,3) UNSIGNED,
@@ -158,7 +158,6 @@ db_con.commit()
 cursor.execute("""CREATE TABLE IF NOT EXISTS Review(
                   ReviewId SMALLINT UNSIGNED AUTO_INCREMENT,
                   Headline VARCHAR(511) NOT NULL,
-                  MpaaRating ENUM('G','PG','PG-13','R','NC-17','TV-MA','TV-PG','TV-14','TV-Y','TV-Y7','TV-G'),
                   CriticsPick TINYINT UNSIGNED,
                   Summary TEXT,
                   PublicationDate DATE,
