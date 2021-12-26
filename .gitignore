@@ -3,3 +3,4 @@ omdb.json
 test.json
 test.py
 .vscode/
+__pycache__/
