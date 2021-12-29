@@ -161,6 +161,7 @@ json_to_db_dict = {
 }
 
 
+
 def json_to_db(table, col, val):
     if table in json_to_db_dict and col in json_to_db_dict[table]:
         for r in json_to_db_dict[table][col]:
@@ -180,6 +181,9 @@ def json_to_db(table, col, val):
         # val in ['<int <= 100>%']
         else: 
             val = val[:val.find('%')]
+    
+    if col == 'Rating':
+        val = '' if val not in ['G','PG','PG-13','R','NC-17','TV-MA','TV-PG','TV-14','TV-Y','TV-Y7','TV-G','Approved','MA-17'] else val
         
     return val
 
