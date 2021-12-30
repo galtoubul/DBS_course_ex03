@@ -28,9 +28,10 @@ def get(table, desired_col, cond_dict):
     select_query_params_dict = {}
 
     is_first = True
-    for (cond_col, cond_val) in cond_dict.items():
-        select_query += f'{cond_col} = %({cond_val})s ' if is_first else f'AND {cond_col} = %({cond_val})s '
-        select_query_params_dict[cond_val] = cond_val
+    for ind, (cond_col, cond_val) in enumerate(cond_dict.items()):
+        place_holder = f'var_{ind}'
+        select_query += f'{cond_col} = %({place_holder})s ' if is_first else f'AND {cond_col} = %({place_holder})s '
+        select_query_params_dict[place_holder] = cond_val
         if is_first:
             is_first = False
 
