@@ -47,7 +47,8 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS Movie(
                   ImdbRatingId VARCHAR(255),
                   FOREIGN KEY (PosterId) REFERENCES Poster(PosterId) ON DELETE CASCADE ON UPDATE CASCADE,
                   FOREIGN KEY (ImdbRatingId) REFERENCES ImdbRating(ImdbId) ON DELETE CASCADE ON UPDATE CASCADE,
-                  PRIMARY KEY (MovieId)
+                  PRIMARY KEY (MovieId),
+                  FULLTEXT (Plot)
     );""")
 db_con.commit()
 
