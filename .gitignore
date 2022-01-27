@@ -5,3 +5,5 @@ test.py
 .vscode/
 __pycache__/
 .env
+BFG.exe
+bfg-1.13.0.jar
