@@ -4,3 +4,4 @@ test.json
 test.py
 .vscode/
 __pycache__/
+.env
