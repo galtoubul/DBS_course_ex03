@@ -9,5 +9,6 @@ db_port = int(os.getenv('DB_PORT'))
 db_password = os.getenv('DB_PASSWORD')
 db_database = os.getenv('DB_DATABASE')
 
-ERR = -1
-SUCCESS = 0
+ERR      = -1
+SUCCESS  = 0
+DUP      = -2 # duplicate record

@@ -2,7 +2,7 @@ import inspect
 import os
 from flask import Flask
 from flaskext.mysql import MySQL
-from config import ERR, SUCCESS, db_host, db_user, db_password, db_database, db_port
+from config import ERR, db_host, db_user, db_password, db_database, db_port
 
 
 app = Flask(__name__)
@@ -28,7 +28,7 @@ def run_query(query, query_params_dict):
     return cursor
 
 
-def q1(word: str, limit: int) -> None:
+def q1(word: str, limit: int = 50) -> None:
     '''For each movie that follows the following condition:
        1. Contains <word> in his plot
        Prints its name and plot
@@ -66,7 +66,7 @@ def q1(word: str, limit: int) -> None:
         print(f'\n\nq1 returned {cnt} results')
 
 
-def q2(avg_rating: int, imdb_rating: int, limit: int) -> None:
+def q2(avg_rating: int, imdb_rating: float, limit: int = 50) -> None:
     '''For each movie that follows the following conditions:
        1. Has average rating of at least <avg_rating>
        2. Has imdb rating of at list <avg_rating>
@@ -117,7 +117,7 @@ def q2(avg_rating: int, imdb_rating: int, limit: int) -> None:
         print(f'\n\nq2 returned {cnt} results')
 
 
-def q3(wins: int, nominations: int, limit: int) -> None:
+def q3(wins: int, nominations: int, limit: int = 50) -> None:
     '''For each movie that follows the following conditions:
        1. Won <wins> awards
        2. Was nominated for <nominations> awards
@@ -176,32 +176,51 @@ def q3(wins: int, nominations: int, limit: int) -> None:
         print(f'\n\nq3 returned {cnt} results')
 
 
-def q4() -> None:
+def q4(language:str) -> None:
     '''For each movie that follows the following condition:
-       1. Available in the largest number of languages
-       Prints its name
+       1. Available in <language> language
+       2. Has the largest number of languages
+       Prints its name and its languages
+
+       language: string representing one of the languages from Language table
     '''
-    query = """SELECT M.Name
-               FROM Movie as M
-               WHERE M.MovieId = (SELECT LM.MovieId
-                                  FROM LanguageMovie as LM
-                                  GROUP BY LM.MovieId
-                                  ORDER BY COUNT(*) DESC
-                                  LIMIT 1);"""
-    print(f'\n\nq4\nquery = {query}')
+    query = """SELECT M.Name, count(*) as number_of_languages, GROUP_CONCAT(L.Name SEPARATOR ', ')
+               FROM LanguageMovie as LM,
+                    Language as L,
+                    Movie as M
+               WHERE LM.LanguageId = L.LanguageId                  AND
+                     EXISTS (SELECT *
+                             FROM LanguageMovie as LM2,
+                                  Language as L2
+                             WHERE L2.Name = %(language)s          AND
+                                   L2.LanguageId = LM2.LanguageId  AND
+                                   LM2.MovieId = LM.MovieId)       AND
+                     M.MovieId = LM.MovieId
+               GROUP BY LM.MovieId
+               ORDER BY COUNT(*) DESC
+               LIMIT 1;"""
+    query_params_dict = {'language': language}
+    print(f'\n\nq4\nquery = {query}\nquery_params_dict = {query_params_dict}')
     
-    cursor = run_query(query, {})
+    cursor = run_query(query, query_params_dict)
 
     if cursor != ERR:
 
         try:
-            res = cursor.fetchone()
+            results = cursor.fetchall()
         except Exception as err:
             print(f'\n\nq4\nerror = {str(err)}')
             return
 
-        print('\n\nq4 results:\n' + 11*'-')
-        print(f'The movie which is available in the largest number of languages = {res[0]}')
+        cnt = 0
+        cols = (os.get_terminal_size()).columns
+        print('\n\nq4 results:\n' + cols * '*')
+        for res in results:
+            cnt += 1
+            print('{0:<12} =  '.format('Name') + str(res[0]))
+            print('{0:<12} =  '.format('Languages #') + str(res[1]))
+            print('{0:<12} =  '.format('Languages') + str(res[2]))
+        print(f'\n\nq4 returned {cnt} results')
 
 
 def q5(votes:int, limit:int) -> None:
@@ -260,7 +279,7 @@ def q5(votes:int, limit:int) -> None:
 def q6(country:str) -> None:
     '''For each movie that follows the following conditions:
        1. It was filmed in <country>
-       2. Its time difference is equal to the minimal time difference
+       2. Its time difference between publication date and release date is equal to the minimal time difference
           from all the movies that were filmed in that country
        3. Its review was written after its release date
        Prints its name, release date, its review publication date and the time difference between them
@@ -357,11 +376,12 @@ def q7() -> None:
         print(f'movie name = {res[0]}')
         print(f'url = {res[1]}')
 
+
 # Running examples
-# q1(word='and', limit=100)
-# q2(90, 8, 100)
+q1(word='mom', limit=4)
+# q2(90, 9.5, 4)
 # q3(0,5,200)
-# q4()
+# q4('English')
 # q5(500000, 100)
 # q6('USA')
-q7()
+# q7()

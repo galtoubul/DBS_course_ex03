@@ -1,24 +1,18 @@
-from os import link
 import mysql.connector as SQLC
 import inspect
 from dateutil.parser import parse
+from config import ERR, SUCCESS, DUP, db_host, db_user, db_password, db_database, db_port
 
-ERR     = -1
-SUCCESS = 0
-DUP     = -2
-
-host = 'localhost'
-port = '3305'
-user = 'DbMysql25'
-password = 'DbMysql25'
-db_name = 'DbMysql25'
 
 # connect to db
-db_con = SQLC.connect(host=host, port=port, user=user,passwd=password)
+db_con = SQLC.connect(host=db_host, port=db_port, user=db_user,passwd=db_password)
 cursor = db_con.cursor(buffered=True)
 
 def get(table, desired_col, cond_dict):
-    cursor.execute(f'USE {db_name}')
+    '''Returns <desired_col> column for all the records
+       from <table> table which holds the conditions in <cond_dict>
+    '''
+    cursor.execute(f'USE {db_database}')
     db_con.commit()
 
     select_query = f"""SELECT {desired_col}
@@ -47,6 +41,8 @@ def get(table, desired_col, cond_dict):
         return ERR
 
 
+# dictionary for tranlaing our tables columns' names into
+# the keys in the retrieved json (from the external APIs)
 db_to_api_dict = {
     'Poster': {
         'Url': 'Poster'
@@ -143,6 +139,8 @@ db_to_api_dict = {
 }
 
 
+# dictionary for tranlaing the values in the retrieved json (from the external APIs)
+# into our tables columns' values
 json_to_db_dict = {
     'ImdbRating': {
         'Votes': [(',', ''),('N/A', '')],
@@ -162,8 +160,11 @@ json_to_db_dict = {
 }
 
 
-
 def json_to_db(table, col, val):
+    '''val: a value from a json that was retrieved from the external APIs
+       table: the table that this val is designated for
+       col: The column in <table> table that this val is designated for
+    '''
     if table in json_to_db_dict and col in json_to_db_dict[table]:
         for r in json_to_db_dict[table][col]:
             print(f'\n\njson_to_db\ntable = {table}\nval = {val}\ncol = {col}\nr = {r}')
@@ -190,7 +191,7 @@ def json_to_db(table, col, val):
 
 
 def init_insert_query(table_name):
-    return f'INSERT INTO {db_name}.{table_name} ', '(', 'VALUES('
+    return f'INSERT INTO {db_database}.{table_name} ', '(', 'VALUES('
 
 
 def finalize_insert_query(insert_query_cols, insert_query_vals, insert_query):
@@ -201,6 +202,10 @@ def finalize_insert_query(insert_query_cols, insert_query_vals, insert_query):
 
 
 def build_insert_query(table_name, data, fks_dict=None):
+    '''Builds an insert query body and parameters
+       table_name: the table which this query will insety data into
+       data: a dictionary of keys and values that was retrieved from the external APIs
+       fks_dict: data to be inserted into the tables which is designated for FKs columns'''
     insert_query, insert_query_cols, insert_query_vals = init_insert_query(table_name)
     insert_query_params_dict = {}
     is_first = True
@@ -401,127 +406,3 @@ def add_movie(movie):
     add_genre(movie, movie_id)
 
     return movie_id if add_movie_rc != ERR else ERR
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def select(table, desired_cols_list, conds_dict):
-#     select_query = 'SELECT '
-
-#     is_first = True
-#     for desired_col in desired_cols_list:
-#         select_query += f'%({desired_col})s' if is_first else f', %({desired_col})s'
-#         if is_first:
-#             is_first = False
-
-#     select_query = f'FROM {table} WHERE'
-    
-#     is_first = True
-#     for (cond_col, cond_val) in conds_dict.items():
-#         select_query += f' %({cond_col})s = %({cond_val})s' if is_first else f' AND %({cond_col})s = %({cond_val})s'
-#         if is_first:
-#             is_first = False
-
-#     select_query_params_dict = {'desired_col': desired_col,
-#                                 'table': table,
-#                                 'cond_col': cond_col,
-#                                 'cond_val': cond_val}
-#     try:
-#         cursor.execute(select_query, select_query_params_dict)
-#         db_con.commit()
-#         return cursor.fetchone()[0]
-#     except SQLC.IntegrityError as err:
-#         print(f'\n\nget_id\nerror = {err}')
-#         return ERR
-
-
-
-
-
-
-
-# def insert(table_name, data, fks):
-#     caller = inspect.stack()[1].function
-#     insert_query = f'INSERT INTO {db_name}.{table_name} '
-#     insert_query_cols = '('
-#     insert_query_vals = 'VALUES('
-
-#     insert_query_params_dict = {}
-#     is_first = True
-#     for (db_format, api_fk_format) in db_to_api_fk_dict[table_name].items():
-#         if api_fk_format in data and data[api_fk_format] != '':
-#             if not is_first:
-#                 insert_query_cols += ', '
-#                 insert_query_vals += ', '
-#             is_first = False
-
-#             insert_query_cols += db_format
-#             insert_query_vals += f'%({api_fk_format})s'
-#             insert_query_params_dict[api_fk_format] = data[api_fk_format]
-
-#     insert_query_cols += ') '
-#     insert_query_vals += ');'
-#     insert_query += insert_query_cols + insert_query_vals
-
-#     print(f'\n\ninsert | caller = {caller} | table name = {table_name}insert_query = \n{insert_query}\nquery_params_dict = \n{insert_query_params_dict}')
-    
-#     try:
-#         cursor.execute(insert_query, insert_query_params_dict)
-#         db_con.commit()
-#     except SQLC.IntegrityError as err:
-#         print(f'\n\n{caller}\nerror = {err}')
-#         return ERR
-#     print(f'\n\ninsert | caller = {caller} | table name = {table_name}\nSuccesful insert! {cursor.rowcount} rows were affacted')
-#     return SUCCESS
-
-
-# def add_picture(picture):
-#     table_name = 'Picture'
-#     insert_query = f'INSERT INTO {db_name}.{table_name} '
-#     insert_query_cols = '('
-#     insert_query_vals = 'VALUES('
-
-#     insert_query_params_dict = {}
-#     is_first = True
-#     for (db_format, api_json_format) in db_to_api_json_dict.items():
-#         if api_json_format in picture and picture[api_json_format] != '':
-#             if not is_first:
-#                 insert_query_cols += ', '
-#                 insert_query_vals += ', '
-#             is_first = False
-
-#             insert_query_cols += db_format
-#             insert_query_vals += f'%({api_json_format})s'
-#             insert_query_params_dict[api_json_format] = picture[api_json_format]
-    
-#     insert_query_cols += ') '
-#     insert_query_vals += ');'
-#     insert_query += insert_query_cols + insert_query_vals
-
-#     print(f'\n\nDB add_picture\ninsert_query = \n{insert_query}\nquery_params_dict = \n{insert_query_params_dict}')
-    
-#     try:
-#         cursor.execute(insert_query, insert_query_params_dict)
-#         db_con.commit()
-#     except SQLC.IntegrityError as err:
-#         print(f'\n\nDB add_picture\nerror = {err}')
-#         return ERR
-#     print(f'\n\nDB add_picture\nSuccesful insert! {cursor.rowcount} rows were affacted')
-#     return SUCCESS
